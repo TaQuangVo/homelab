@@ -1,8 +1,8 @@
 const express = require("express")
 const mongoose = require("mongoose")
-const connect = require("connect-mongo")
-const session = require("express-session")
 const parseurl = require("parseurl")
+const session = require("express-session")
+const connectMongoStore = require("connect-mongo")
 
 
 
@@ -12,40 +12,26 @@ const app = express()
 const port = 3000
 
 
+//app db
 //mongoose connection
-const mongoClientP = mongoose.connect("mongodb://mongo",{useNewUrlParser: true, useUnifiedTopology: true}).then(m => m.connection.getClient())
+const dbUrl = "mongodb://mongo"
 
-//express-session util
-var sessionUtil = {
-    secret: 'Ma secret',
-    resave: false,
-    saveUninitialized: true,
-    store:connect.create({mongoUrl:"mongodb://mongo"}),
-    cookie: { /*secure: true*/ maxAge: 60000 , test:"this is a test"}
-}
-app.use(session(sessionUtil))
-
-
-//db config
-const dbschema = mongoose.Schema({
-    _id: String,
-    value: Number
+const appDb = mongoose.createConnection(dbUrl, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
 })
-const dbmodel = mongoose.model("visitCount", dbschema)
-
 
 //check connection
-const db = mongoose.connection
-db.on("error", ()=>{
+appDb.on("error", () => {
     console.error.bind(console, "Connection error: ")
 })
-db.on("open", async()=>{
+appDb.on("open", async () => {
 
     console.log("Connection success")
 
     const data = await dbmodel.find()
     console.log(data, data.length)
-    if(data.length == 0){
+    if (data.length == 0) {
         console.log("create init data")
 
         const initData = new dbmodel({
@@ -53,23 +39,52 @@ db.on("open", async()=>{
             value: 0
         })
 
-        initData.save((err, data)=>{
-            if(err){
-                console.log("Failed set init val: ",err)
-            }else{
+        initData.save((err, data) => {
+            if (err) {
+                console.log("Failed set init val: ", err)
+            } else {
                 console.log("init value set successfully")
             }
         })
-    }else{
+    } else {
         console.log("init data exit, just go!")
     }
 })
 
+//db schema, models
+const dbschema = mongoose.Schema({
+    _id: String,
+    value: Number
+})
+const dbmodel = appDb.model("visitCount", dbschema)
+
+
+
+//session db
+//express-session util
+const sessionStore = connectMongoStore.create({
+    mongoUrl: dbUrl,
+    dbName: "mySessions",
+    stringify: false,
+})
+
+var sessionUtil = {
+    secret: 'Ma top an secret',
+    resave: false,
+    saveUninitialized: true,
+    store: sessionStore,
+    cookie: { /*secure: true*/ maxAge: 1000 * 60 * 60 * 24, test: "this is a test" }
+}
+app.use(session(sessionUtil))
+
+
+
+
 //midleware
-app.use((req, res, next)=>{
+app.use((req, res, next) => {
     const urlPathname = parseurl(req).pathname
 
-    if(!req.session.views){
+    if (!req.session.views) {
         req.session.views = {}
     }
 
@@ -79,17 +94,17 @@ app.use((req, res, next)=>{
     next();
 })
 
-app.use(async(req,res,next) => {
+app.use(async (req, res, next) => {
     let data
     try {
         data = await dbmodel.findById("thisistheid")
     } catch (error) {
-        res.status(500).json({error:"failed to get data", msg: error})
+        res.status(500).json({ error: "failed to get data", msg: error })
     }
 
-    if(data.length == 0){
-        res.status(400).json({error:"no data", msg:"there is no data in the database"})
-    }else{
+    if (data.length == 0) {
+        res.status(400).json({ error: "no data", msg: "there is no data in the database" })
+    } else {
         const count = data.value + 1;
         data.value = count;
         data.save()
@@ -102,20 +117,20 @@ app.use(async(req,res,next) => {
 })
 
 //routes
-app.get("/",(req, res)=> {
+app.get("/", (req, res) => {
 
-    res.send(`<div style="width:100vw;display:flex;height:100vh;justify-content:center;align-items: center;"><h1 style="text-align:center;color:blue;">This website have had ${req.totalView} visiters, you have visited this page ${req.session.views["/"] } times.</h1></div>`)
+    res.send(`<div style="width:100vw;display:flex;height:100vh;justify-content:center;align-items: center;"><h1 style="text-align:center;color:blue;">This website have had ${req.totalView} visiters, you have visited this page ${req.session.views["/"]} times. :p</h1></div>`)
 
 })
 
-app.get("/home",(req, res)=> {
+app.get("/home", (req, res) => {
 
-    res.send(`<div style="width:100vw;display:flex;height:100vh;justify-content:center;align-items: center;"><h1 style="text-align:center;color:blue;">This website have had ${req.totalView} visiters, you have visited this page ${req.session.views["/home"] } times.</h1></div>`)
+    res.send(`<div style="width:100vw;display:flex;height:100vh;justify-content:center;align-items: center;"><h1 style="text-align:center;color:blue;">This website have had ${req.totalView} visiters, you have visited this page ${req.session.views["/home"]} times. :P </h1></div>`)
 
 })
 
 //app listener
-app.listen(port, ()=>{
+app.listen(port, () => {
     console.log("App listen on port " + port)
 })
 

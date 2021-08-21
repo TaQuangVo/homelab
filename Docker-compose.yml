@@ -11,3 +11,6 @@ services:
       - "3000:3000"
     links:
       - mongo
+    volumes:
+      - /app/node_modules
+      - .:/app
